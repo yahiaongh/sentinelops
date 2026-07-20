@@ -19,21 +19,21 @@ services:
       - "8082:8082"
       - "9644:9644"
     healthcheck:
-      test: ["CMD", "rpk", "cluster", "health"]
+      test: [ "CMD", "rpk", "cluster", "health" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks: [sentinelops-net]
+    networks: [ sentinelops-net ]
 
   redpanda-console:
     image: docker.redpanda.com/redpandadata/console:v2.7.2
     container_name: sentinelops-console
-    depends_on: [redpanda]
+    depends_on: [ redpanda ]
     environment:
       KAFKA_BROKERS: redpanda:9092
     ports:
       - "8080:8080"
-    networks: [sentinelops-net]
+    networks: [ sentinelops-net ]
 
   timescaledb:
     image: timescale/timescaledb:2.15.3-pg16
@@ -46,19 +46,20 @@ services:
       - "5432:5432"
     volumes:
       - timescale-data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentinelops"]
+      test: [ "CMD-SHELL", "pg_isready -U sentinelops" ]
       interval: 10s
       timeout: 5s
       retries: 5
-    networks: [sentinelops-net]
+    networks: [ sentinelops-net ]
 
   redis:
     image: redis:7.4-alpine
     container_name: sentinelops-redis
     ports:
       - "6379:6379"
-    networks: [sentinelops-net]
+    networks: [ sentinelops-net ]
   log-producer:
     build:
       context: ../services/log-producer
@@ -73,7 +74,29 @@ services:
       EMIT_INTERVAL_SECONDS: "0.2"
       ANOMALY_PROBABILITY: "0.02"
     restart: unless-stopped
-    networks: [sentinelops-net]
+    networks: [ sentinelops-net ]
+  ingestion-go:
+    build:
+      context: ../services/ingestion-go
+      dockerfile: Dockerfile
+    container_name: sentinelops-ingestion-go
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_TOPIC: service-logs
+      KAFKA_GROUP_ID: sentinelops-ingestor
+      DATABASE_URL: postgres://sentinelops:${TIMESCALE_PASSWORD:-devpassword}@timescaledb:5432/sentinelops
+      BATCH_SIZE: "100"
+      BATCH_INTERVAL_MS: "500"
+      METRICS_ADDR: ":9100"
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+    networks: [ sentinelops-net ]
 networks:
   sentinelops-net:
     driver: bridge
