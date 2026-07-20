@@ -1,0 +1,28 @@
+# General
+.env
+.env.*
+*.log
+.DS_Store
+
+# Go
+services/ingestion-go/bin/
+services/ingestion-go/*.exe
+
+# Rust
+services/anomaly-rust/target/
+
+# Python
+services/llm-query-python/__pycache__/
+services/llm-query-python/.venv/
+services/llm-query-python/*.pyc
+
+# Node / Next.js
+services/dashboard-nextjs/node_modules/
+services/dashboard-nextjs/.next/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate*
+
+# IDE
+.vscode/
