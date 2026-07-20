@@ -1,0 +1,82 @@
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    container_name: sentinelops-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+      - "8082:8082"
+      - "9644:9644"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [sentinelops-net]
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    container_name: sentinelops-console
+    depends_on: [redpanda]
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8080:8080"
+    networks: [sentinelops-net]
+
+  timescaledb:
+    image: timescale/timescaledb:2.15.3-pg16
+    container_name: sentinelops-timescaledb
+    environment:
+      POSTGRES_USER: sentinelops
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-devpassword}
+      POSTGRES_DB: sentinelops
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinelops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [sentinelops-net]
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: sentinelops-redis
+    ports:
+      - "6379:6379"
+    networks: [sentinelops-net]
+  log-producer:
+    build:
+      context: ../services/log-producer
+      dockerfile: Dockerfile
+    container_name: sentinelops-log-producer
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      LOG_TOPIC: service-logs
+      EMIT_INTERVAL_SECONDS: "0.2"
+      ANOMALY_PROBABILITY: "0.02"
+    restart: unless-stopped
+    networks: [sentinelops-net]
+networks:
+  sentinelops-net:
+    driver: bridge
+
+volumes:
+  timescale-data:
