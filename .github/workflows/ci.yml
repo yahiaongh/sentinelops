@@ -72,6 +72,38 @@ jobs:
       - name: Run ruff format check
         working-directory: services/log-producer
         run: ruff format --check .
+  test-go-integration:
+    name: Integration Test (Go + TimescaleDB)
+    runs-on: ubuntu-latest
+    needs: lint-go
+    services:
+      timescaledb:
+        image: timescale/timescaledb:2.15.3-pg16
+        env:
+          POSTGRES_USER: sentinelops
+          POSTGRES_PASSWORD: devpassword
+          POSTGRES_DB: sentinelops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.4"
+          cache-dependency-path: services/ingestion-go/go.sum
+
+      - name: Run integration tests
+        working-directory: services/ingestion-go
+        env:
+          TEST_DATABASE_URL: postgres://sentinelops:devpassword@localhost:5432/sentinelops
+        run: go test -tags=integration ./internal/store/... -v
 
   docker-build:
     name: Docker Build Validation
@@ -100,7 +132,7 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [lint-go, test-go, lint-python, docker-build]
+    needs: [lint-go, test-go, test-go-integration, lint-python, docker-build]
     if: always()
     steps:
       - name: Check all jobs succeeded
