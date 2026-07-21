@@ -38,8 +38,17 @@ func (s *Store) Pool() *pgxpool.Pool {
 	return s.pool
 }
 
-// FlushBatch writes a batch of events to TimescaleDB using a single
-// multi-row INSERT executed as a pipelined batch for throughput.
+const insertLogEventQuery = `
+	INSERT INTO log_events
+		(event_id, ts, service, endpoint, level, status_code, latency_ms, message, trace_id, anomaly_injected)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	ON CONFLICT (event_id, ts) DO NOTHING`
+
+// FlushBatch writes a batch of events to TimescaleDB using pgx's pipelined
+// Batch API: all inserts are sent over the wire in a single round trip
+// instead of N sequential Exec calls, which is the main throughput win over
+// naive row-by-row inserts while still preserving per-row ON CONFLICT
+// idempotency (unlike COPY, which can't express that).
 func (s *Store) FlushBatch(ctx context.Context, events []consumer.LogEvent) error {
 	if len(events) == 0 {
 		return nil
@@ -51,11 +60,24 @@ func (s *Store) FlushBatch(ctx context.Context, events []consumer.LogEvent) erro
 	}()
 	metrics.BatchSize.Observe(float64(len(events)))
 
-	const query = `
-		INSERT INTO log_events
-			(event_id, ts, service, endpoint, level, status_code, latency_ms, message, trace_id, anomaly_injected)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (event_id, ts) DO NOTHING`
+	batch := &pgx.Batch{}
+	validCount := 0
+	for _, e := range events {
+		ts, err := e.ParsedTimestamp()
+		if err != nil {
+			s.logger.Warn("skipping event with unparsable timestamp", "event_id", e.EventID, "error", err)
+			continue
+		}
+		batch.Queue(insertLogEventQuery,
+			e.EventID, ts, e.Service, e.Endpoint, e.Level,
+			e.StatusCode, e.LatencyMs, e.Message, e.TraceID, e.AnomalyInjected,
+		)
+		validCount++
+	}
+
+	if validCount == 0 {
+		return nil
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -68,19 +90,17 @@ func (s *Store) FlushBatch(ctx context.Context, events []consumer.LogEvent) erro
 		}
 	}()
 
-	for _, e := range events {
-		ts, err := e.ParsedTimestamp()
-		if err != nil {
-			s.logger.Warn("skipping event with unparsable timestamp", "event_id", e.EventID, "error", err)
-			continue
-		}
-		if _, err := tx.Exec(ctx, query,
-			e.EventID, ts, e.Service, e.Endpoint, e.Level,
-			e.StatusCode, e.LatencyMs, e.Message, e.TraceID, e.AnomalyInjected,
-		); err != nil {
+	results := tx.SendBatch(ctx, batch)
+	for i := 0; i < validCount; i++ {
+		if _, err := results.Exec(); err != nil {
 			metrics.WriteErrorsTotal.Inc()
+			_ = results.Close()
 			return err
 		}
+	}
+	if err := results.Close(); err != nil {
+		metrics.WriteErrorsTotal.Inc()
+		return err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -88,6 +108,6 @@ func (s *Store) FlushBatch(ctx context.Context, events []consumer.LogEvent) erro
 		return err
 	}
 
-	metrics.EventsWrittenTotal.Add(float64(len(events)))
+	metrics.EventsWrittenTotal.Add(float64(validCount))
 	return nil
 }
