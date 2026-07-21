@@ -26,6 +26,8 @@ flowchart LR
 ```
 
 ## Status
+[![CI](https://github.com/yahiaongh/sentinelops/actions/workflows/ci.yml/badge.svg)](https://github.com/yahiaongh/sentinelops/actions/workflows/ci.yml)
+
 🚧 Early development — see [milestones](docs/MILESTONES.md).
 
 ## Local Development
