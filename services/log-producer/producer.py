@@ -16,7 +16,7 @@ import sys
 import time
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from confluent_kafka import Producer
 from dotenv import load_dotenv
@@ -71,7 +71,9 @@ class AnomalyState:
         if service not in self.active_bursts and random.random() < ANOMALY_PROBABILITY:
             burst_len = random.randint(20, 60)
             self.active_bursts[service] = burst_len
-            logger.warning(f"[ANOMALY INJECTED] Starting burst on '{service}' for {burst_len} events")
+            logger.warning(
+                f"[ANOMALY INJECTED] Starting burst on '{service}' for {burst_len} events"
+            )
 
     def in_burst(self, service: str) -> bool:
         return service in self.active_bursts
@@ -110,7 +112,7 @@ def build_event(service: str, anomaly_state: AnomalyState) -> LogEvent:
             message = "Authentication failed: invalid or expired token"
         return LogEvent(
             event_id=str(uuid.uuid4()),
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             service=service,
             endpoint=endpoint,
             level=level,
@@ -129,7 +131,7 @@ def build_event(service: str, anomaly_state: AnomalyState) -> LogEvent:
 
     return LogEvent(
         event_id=str(uuid.uuid4()),
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         service=service,
         endpoint=endpoint,
         level=level,
@@ -147,10 +149,12 @@ def delivery_report(err, msg):
 
 
 def main() -> None:
-    producer = Producer({
-        "bootstrap.servers": KAFKA_BROKERS,
-        "client.id": "sentinelops-log-producer",
-    })
+    producer = Producer(
+        {
+            "bootstrap.servers": KAFKA_BROKERS,
+            "client.id": "sentinelops-log-producer",
+        }
+    )
 
     anomaly_states = {service: AnomalyState() for service in SERVICES}
     running = True

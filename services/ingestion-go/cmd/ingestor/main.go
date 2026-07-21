@@ -47,7 +47,11 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	metricsServer := &http.Server{Addr: cfg.MetricsAddr, Handler: mux}
+	metricsServer := &http.Server{
+		Addr:              cfg.MetricsAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	go func() {
 		logger.Info("metrics server listening", "addr", cfg.MetricsAddr)
 		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

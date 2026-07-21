@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yahiaongh/sentinelops/services/ingestion-go/internal/consumer"
 	"github.com/yahiaongh/sentinelops/services/ingestion-go/internal/metrics"
@@ -49,21 +51,22 @@ func (s *Store) FlushBatch(ctx context.Context, events []consumer.LogEvent) erro
 	}()
 	metrics.BatchSize.Observe(float64(len(events)))
 
-	batch := &pgxBatch{}
 	const query = `
 		INSERT INTO log_events
 			(event_id, ts, service, endpoint, level, status_code, latency_ms, message, trace_id, anomaly_injected)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (event_id, ts) DO NOTHING`
 
-	pb := s.pool.Begin
-	_ = pb
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		metrics.WriteErrorsTotal.Inc()
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			s.logger.Warn("transaction rollback failed", "error", err)
+		}
+	}()
 
 	for _, e := range events {
 		ts, err := e.ParsedTimestamp()
@@ -86,8 +89,5 @@ func (s *Store) FlushBatch(ctx context.Context, events []consumer.LogEvent) erro
 	}
 
 	metrics.EventsWrittenTotal.Add(float64(len(events)))
-	_ = batch
 	return nil
 }
-
-type pgxBatch struct{}

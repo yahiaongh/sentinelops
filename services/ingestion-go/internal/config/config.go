@@ -7,13 +7,13 @@ import (
 )
 
 type Config struct {
-	KafkaBrokers   []string
-	KafkaTopic     string
-	KafkaGroupID   string
-	DatabaseURL    string
-	BatchSize      int
-	BatchInterval  time.Duration
-	MetricsAddr    string
+	KafkaBrokers  []string
+	KafkaTopic    string
+	KafkaGroupID  string
+	DatabaseURL   string
+	BatchSize     int
+	BatchInterval time.Duration
+	MetricsAddr   string
 }
 
 func Load() Config {
