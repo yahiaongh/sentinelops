@@ -1,144 +1,182 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
-  lint-go:
-    name: Lint (Go)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    lint-go:
+        name: Lint (Go)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23.4"
-          cache-dependency-path: services/ingestion-go/go.sum
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.23.4"
+                  cache-dependency-path: services/ingestion-go/go.sum
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.61.0
-          working-directory: services/ingestion-go
-          args: --timeout=5m
+            - name: golangci-lint
+              uses: golangci/golangci-lint-action@v6
+              with:
+                  version: v1.61.0
+                  working-directory: services/ingestion-go
+                  args: --timeout=5m
 
-  test-go:
-    name: Test (Go)
-    runs-on: ubuntu-latest
-    needs: lint-go
-    steps:
-      - uses: actions/checkout@v4
+    test-go:
+        name: Test (Go)
+        runs-on: ubuntu-latest
+        needs: lint-go
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23.4"
-          cache-dependency-path: services/ingestion-go/go.sum
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.23.4"
+                  cache-dependency-path: services/ingestion-go/go.sum
 
-      - name: Run tests
-        working-directory: services/ingestion-go
-        run: go test ./... -v -race -cover
+            - name: Run tests
+              working-directory: services/ingestion-go
+              run: go test ./... -v -race -cover
 
-      - name: Build binary
-        working-directory: services/ingestion-go
-        run: CGO_ENABLED=0 go build -o /tmp/ingestor ./cmd/ingestor
+            - name: Build binary
+              working-directory: services/ingestion-go
+              run: CGO_ENABLED=0 go build -o /tmp/ingestor ./cmd/ingestor
+    lint-test-rust:
+        name: Lint & Test (Rust)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-  lint-python:
-    name: Lint (Python)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+            - name: Set up Rust
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+                  components: clippy
+                  override: true
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      services/anomaly-rust/target
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('services/anomaly-rust/Cargo.lock') }}
 
-      - name: Install ruff
-        run: pip install ruff==0.7.4
+            - name: Run clippy
+              working-directory: services/anomaly-rust
+              run: cargo clippy --all-targets -- -D warnings
 
-      - name: Run ruff check
-        working-directory: services/log-producer
-        run: ruff check .
+            - name: Run tests
+              working-directory: services/anomaly-rust
+              run: cargo test --all
 
-      - name: Run ruff format check
-        working-directory: services/log-producer
-        run: ruff format --check .
-  test-go-integration:
-    name: Integration Test (Go + TimescaleDB)
-    runs-on: ubuntu-latest
-    needs: lint-go
-    services:
-      timescaledb:
-        image: timescale/timescaledb:2.15.3-pg16
-        env:
-          POSTGRES_USER: sentinelops
-          POSTGRES_PASSWORD: devpassword
-          POSTGRES_DB: sentinelops
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v4
+            - name: Check formatting
+              working-directory: services/anomaly-rust
+              run: cargo fmt --check
+    lint-python:
+        name: Lint (Python)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23.4"
-          cache-dependency-path: services/ingestion-go/go.sum
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
 
-      - name: Run integration tests
-        working-directory: services/ingestion-go
-        env:
-          TEST_DATABASE_URL: postgres://sentinelops:devpassword@localhost:5432/sentinelops
-        run: go test -tags=integration ./internal/store/... -v
+            - name: Install ruff
+              run: pip install ruff==0.7.4
 
-  docker-build:
-    name: Docker Build Validation
-    runs-on: ubuntu-latest
-    needs: [test-go, lint-python]
-    steps:
-      - uses: actions/checkout@v4
+            - name: Run ruff check
+              working-directory: services/log-producer
+              run: ruff check .
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+            - name: Run ruff format check
+              working-directory: services/log-producer
+              run: ruff format --check .
+    test-go-integration:
+        name: Integration Test (Go + TimescaleDB)
+        runs-on: ubuntu-latest
+        needs: lint-go
+        services:
+            timescaledb:
+                image: timescale/timescaledb:2.15.3-pg16
+                env:
+                    POSTGRES_USER: sentinelops
+                    POSTGRES_PASSWORD: devpassword
+                    POSTGRES_DB: sentinelops
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Build ingestion-go image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/ingestion-go
-          push: false
-          tags: sentinelops/ingestion-go:ci
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.23.4"
+                  cache-dependency-path: services/ingestion-go/go.sum
 
-      - name: Build log-producer image
-        uses: docker/build-push-action@v6
-        with:
-          context: services/log-producer
-          push: false
-          tags: sentinelops/log-producer:ci
+            - name: Run integration tests
+              working-directory: services/ingestion-go
+              env:
+                  TEST_DATABASE_URL: postgres://sentinelops:devpassword@localhost:5432/sentinelops
+              run: go test -tags=integration ./internal/store/... -v
 
-  ci-success:
-    name: CI Success
-    runs-on: ubuntu-latest
-    needs: [lint-go, test-go, test-go-integration, lint-python, docker-build]
-    if: always()
-    steps:
-      - name: Check all jobs succeeded
-        run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
-            echo "One or more CI jobs failed"
-            exit 1
-          fi
-          echo "All CI jobs passed"
+    docker-build:
+        name: Docker Build Validation
+        runs-on: ubuntu-latest
+        needs: [test-go, lint-python]
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Build ingestion-go image
+              uses: docker/build-push-action@v6
+              with:
+                  context: services/ingestion-go
+                  push: false
+                  tags: sentinelops/ingestion-go:ci
+
+            - name: Build log-producer image
+              uses: docker/build-push-action@v6
+              with:
+                  context: services/log-producer
+                  push: false
+                  tags: sentinelops/log-producer:ci
+            - name: Build anomaly-rust image
+              uses: docker/build-push-action@v6
+              with:
+                  context: services/anomaly-rust
+                  push: false
+                  tags: sentinelops/anomaly-rust:ci
+    ci-success:
+        name: CI Success
+        runs-on: ubuntu-latest
+        needs:
+            [lint-go, test-go, test-go-integration, lint-test-rust, lint-python, docker-build]
+        if: always()
+        steps:
+            - name: Check all jobs succeeded
+              run: |
+                  if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+                    echo "One or more CI jobs failed"
+                    exit 1
+                  fi
+                  echo "All CI jobs passed"
