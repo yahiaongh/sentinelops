@@ -48,7 +48,9 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 - Local cluster deployment (k3d/kind) as a production-shaped deploy path
 
 ## Known gaps (tracked, not blocking)
-- `anomaly-rust`: `detect()` has no end-to-end unit test (only its component math functions are tested)
-- `anomaly-rust`: EWMA baseline isn't persisted in `AnomalyRecord` for error-burst anomalies
-- `ingestion-go`: `store.go` write path is integration-tested but lacks a unit test with a mocked pool
 - No Grafana/Prometheus scrape config yet — metrics are exposed but not yet centrally collected
+
+## Recently closed
+- `anomaly-rust`: added `detect()` end-to-end tests, including a regression guard for the directional-severity bug
+- `anomaly-rust`: EWMA baseline now persisted in `AnomalyRecord` for error-burst anomalies
+- `ingestion-go`: added mocked-pool unit tests for `store.go`'s write path (`pgxmock`), alongside existing integration tests
