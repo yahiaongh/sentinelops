@@ -49,6 +49,10 @@ pub struct ErrorRateBaseline {
 }
 
 impl ErrorRateBaseline {
+    /// Returns `(baseline_before_update, z_score, severity)` on anomaly,
+    /// or `None` if the current reading isn't anomalous. The baseline is
+    /// the EWMA value *before* this reading was folded in, so callers can
+    /// persist "what we expected" alongside "what we saw".
     pub fn update_and_check(
         &mut self,
         service: &str,
@@ -56,7 +60,7 @@ impl ErrorRateBaseline {
         alpha: f64,
         warning: f64,
         critical: f64,
-    ) -> Option<(f64, &'static str)> {
+    ) -> Option<(f64, f64, &'static str)> {
         let baseline = *self.ewma.get(service).unwrap_or(&current_error_rate);
         let deviation = current_error_rate - baseline;
 
@@ -71,7 +75,7 @@ impl ErrorRateBaseline {
         let scale = baseline.max(0.01); // avoid division blowing up near zero
         let z = deviation / scale;
 
-        severity_for(z, warning, critical).map(|sev| (z, sev))
+        severity_for(z, warning, critical).map(|sev| (baseline, z, sev))
     }
 }
 
@@ -161,7 +165,7 @@ pub fn detect(
         // suspicious drops toward zero are worth flagging) ---
         if current.event_count > 0 {
             let current_error_rate = current.error_count as f64 / current.event_count as f64;
-            if let Some((z, sev)) = error_baseline.update_and_check(
+            if let Some((baseline, z, sev)) = error_baseline.update_and_check(
                 service,
                 current_error_rate,
                 cfg.ewma_alpha,
@@ -173,7 +177,9 @@ pub fn detect(
                     service: service.to_string(),
                     anomaly_type: "error_burst".to_string(),
                     metric_value: current_error_rate,
-                    baseline_mean: 0.0,
+                    baseline_mean: baseline,
+                    // EWMA doesn't track variance, so there's no meaningful
+                    // stddev to report here — 0.0 is accurate, not a placeholder.
                     baseline_stddev: 0.0,
                     z_score: z,
                     severity: sev.to_string(),
@@ -238,5 +244,152 @@ mod tests {
         // A sudden spike should be flagged against the now-stable low baseline.
         let result = baseline.update_and_check("checkout", 0.6, 0.3, 2.5, 4.0);
         assert!(result.is_some(), "expected spike to be flagged");
+        let (baseline_value, _z, _sev) = result.unwrap();
+        assert!(
+            (baseline_value - 0.02).abs() < 0.05,
+            "expected baseline near the primed 0.02 rate, got {baseline_value}"
+        );
+    }
+
+    fn make_bucket(
+        service: &str,
+        minute_offset: i64,
+        p95: f64,
+        max: f64,
+        errors: i64,
+        total: i64,
+    ) -> MinuteBucket {
+        MinuteBucket {
+            bucket: chrono::Utc::now() + chrono::Duration::minutes(minute_offset),
+            service: service.to_string(),
+            event_count: total,
+            error_count: errors,
+            avg_latency_ms: Some(p95 * 0.7),
+            p95_latency_ms: Some(p95),
+            max_latency_ms: Some(max),
+        }
+    }
+
+    fn default_cfg() -> DetectionConfig {
+        DetectionConfig {
+            z_score_warning: 2.5,
+            z_score_critical: 4.0,
+            ewma_alpha: 0.3,
+        }
+    }
+
+    #[test]
+    fn detect_flags_nothing_for_stable_service() {
+        let buckets = vec![
+            make_bucket("checkout", -5, 100.0, 150.0, 1, 100),
+            make_bucket("checkout", -4, 105.0, 155.0, 1, 100),
+            make_bucket("checkout", -3, 98.0, 148.0, 1, 100),
+            make_bucket("checkout", -2, 102.0, 152.0, 1, 100),
+            make_bucket("checkout", -1, 101.0, 151.0, 1, 100),
+        ];
+        let mut baseline = ErrorRateBaseline::default();
+        let anomalies = detect(&buckets, &mut baseline, &default_cfg());
+        assert!(
+            anomalies.is_empty(),
+            "expected no anomalies for a stable service, got: {anomalies:?}"
+        );
+    }
+
+    #[test]
+    fn detect_flags_latency_spike_but_not_a_speedup() {
+        // Five stable baseline minutes, then one minute that spikes p95 way up.
+        let mut buckets = vec![
+            make_bucket("checkout", -6, 100.0, 150.0, 1, 100),
+            make_bucket("checkout", -5, 102.0, 152.0, 1, 100),
+            make_bucket("checkout", -4, 98.0, 148.0, 1, 100),
+            make_bucket("checkout", -3, 101.0, 151.0, 1, 100),
+            make_bucket("checkout", -2, 99.0, 149.0, 1, 100),
+        ];
+        buckets.push(make_bucket("checkout", -1, 5000.0, 6000.0, 1, 100));
+
+        let mut baseline = ErrorRateBaseline::default();
+        let anomalies = detect(&buckets, &mut baseline, &default_cfg());
+
+        let latency_anomalies: Vec<_> = anomalies
+            .iter()
+            .filter(|a| {
+                a.anomaly_type == "latency_spike" || a.anomaly_type == "max_latency_outlier"
+            })
+            .collect();
+        assert!(
+            !latency_anomalies.is_empty(),
+            "expected a latency spike to be detected"
+        );
+        for a in &latency_anomalies {
+            assert!(
+                a.z_score > 0.0,
+                "latency anomaly must have a positive z_score, got {} for {}",
+                a.z_score,
+                a.anomaly_type
+            );
+        }
+
+        // Regression guard for the original bug: a service getting FASTER
+        // than baseline must never be flagged.
+        let mut faster_buckets = vec![
+            make_bucket("payments", -6, 500.0, 600.0, 1, 100),
+            make_bucket("payments", -5, 510.0, 610.0, 1, 100),
+            make_bucket("payments", -4, 490.0, 590.0, 1, 100),
+            make_bucket("payments", -3, 505.0, 605.0, 1, 100),
+            make_bucket("payments", -2, 495.0, 595.0, 1, 100),
+        ];
+        faster_buckets.push(make_bucket("payments", -1, 10.0, 15.0, 1, 100));
+        let mut baseline2 = ErrorRateBaseline::default();
+        let anomalies2 = detect(&faster_buckets, &mut baseline2, &default_cfg());
+        let false_positives: Vec<_> = anomalies2
+            .iter()
+            .filter(|a| {
+                a.anomaly_type == "latency_spike" || a.anomaly_type == "max_latency_outlier"
+            })
+            .collect();
+        assert!(
+            false_positives.is_empty(),
+            "a service running FASTER than baseline must not be flagged, got: {false_positives:?}"
+        );
+    }
+
+    #[test]
+    fn detect_flags_error_burst() {
+        let mut buckets = vec![];
+        for i in (-6..-1).rev() {
+            buckets.push(make_bucket("inventory", i, 100.0, 150.0, 2, 100));
+        }
+        buckets.push(make_bucket("inventory", -1, 100.0, 150.0, 60, 100));
+
+        let mut baseline = ErrorRateBaseline::default();
+        // Prime the EWMA baseline the same way main.rs would across prior cycles.
+        for i in 0..5 {
+            baseline.update_and_check("inventory", 0.02, 0.3, 2.5, 4.0);
+            let _ = i;
+        }
+
+        let anomalies = detect(&buckets, &mut baseline, &default_cfg());
+        let error_anomalies: Vec<_> = anomalies
+            .iter()
+            .filter(|a| a.anomaly_type == "error_burst")
+            .collect();
+        assert!(
+            !error_anomalies.is_empty(),
+            "expected an error burst to be detected, got: {anomalies:?}"
+        );
+    }
+
+    #[test]
+    fn detect_skips_services_with_insufficient_history() {
+        let buckets = vec![
+            make_bucket("new-service", -1, 100.0, 150.0, 1, 100),
+            make_bucket("new-service", 0, 5000.0, 6000.0, 50, 100),
+        ];
+        let mut baseline = ErrorRateBaseline::default();
+        let anomalies = detect(&buckets, &mut baseline, &default_cfg());
+        assert!(
+            anomalies.is_empty(),
+            "expected no anomalies for a service with fewer than 3 buckets of history"
+        );
     }
 }

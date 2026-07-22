@@ -7,13 +7,25 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yahiaongh/sentinelops/services/ingestion-go/internal/consumer"
 	"github.com/yahiaongh/sentinelops/services/ingestion-go/internal/metrics"
 )
 
+// PgxPool is the subset of *pgxpool.Pool's behavior that Store depends on.
+// Defined as an interface (rather than using *pgxpool.Pool directly) so
+// tests can substitute a mock pool without needing a live database.
+type PgxPool interface {
+	Ping(ctx context.Context) error
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Close()
+}
+
 type Store struct {
-	pool   *pgxpool.Pool
+	pool   PgxPool
 	logger *slog.Logger
 }
 
@@ -33,9 +45,12 @@ func (s *Store) Close() {
 }
 
 // Pool exposes the underlying connection pool for use by other internal
-// packages (e.g. migrate) that need direct database access.
+// packages (e.g. migrate) that need direct database access. Returns the
+// concrete *pgxpool.Pool (not the PgxPool interface) since callers like
+// migrate.Apply need the real type, and s.pool is always a genuine
+// *pgxpool.Pool outside of unit tests.
 func (s *Store) Pool() *pgxpool.Pool {
-	return s.pool
+	return s.pool.(*pgxpool.Pool)
 }
 
 const insertLogEventQuery = `
