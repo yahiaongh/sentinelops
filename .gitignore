@@ -26,3 +26,4 @@ infra/terraform/*.tfstate*
 
 # IDE
 .vscode/
+infra/k8s/base/secret.local.yaml

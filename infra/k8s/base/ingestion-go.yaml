@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-go
+  namespace: sentinelops
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ingestion-go }
+  template:
+    metadata:
+      labels: { app: ingestion-go }
+    spec:
+      containers:
+        - name: ingestion-go
+          image: sentinelops/ingestion-go:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9100
+          envFrom:
+            - secretRef:
+                name: sentinelops-secrets
+          env:
+            - name: KAFKA_BROKERS
+              value: "redpanda:9092"
+            - name: KAFKA_TOPIC
+              value: "service-logs"
+            - name: KAFKA_GROUP_ID
+              value: "sentinelops-ingestor"
+            - name: BATCH_SIZE
+              value: "100"
+            - name: BATCH_INTERVAL_MS
+              value: "500"
+            - name: METRICS_ADDR
+              value: ":9100"
+          readinessProbe:
+            httpGet: { path: /healthz, port: 9100 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingestion-go
+  namespace: sentinelops
+spec:
+  selector: { app: ingestion-go }
+  ports:
+    - port: 9100
+      targetPort: 9100

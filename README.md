@@ -28,7 +28,7 @@ flowchart LR
 | `dashboard-nextjs` | TypeScript | Real-time anomaly feed, service health, LLM query terminal | ✅ Running |
 | Prometheus + Grafana | — | Metrics collection and dashboards for all instrumented services | ✅ Running |
 
-See [docs/MILESTONES.md](docs/MILESTONES.md) for the full roadmap and what's shipped so far.
+See [docs/MILESTONES.md](docs/MILESTONES.md) for the full roadmap and what's shipped so far. A Kubernetes deployment of the core pipeline (via k3d) is also available — see [infra/k8s/README.md](infra/k8s/README.md).
 
 ## Quickstart
 
