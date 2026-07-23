@@ -1,0 +1,131 @@
+{
+  "title": "SentinelOps Overview",
+  "uid": "sentinelops-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Events Ingested (rate/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(sentinelops_ingestion_events_written_total[1m]))",
+          "legendFormat": "events written/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Ingestion Write Errors (rate/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(sentinelops_ingestion_write_errors_total[1m]))",
+          "legendFormat": "write errors/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Batch Flush Duration (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(sentinelops_ingestion_batch_flush_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 flush duration"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Batch Size (p50/p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(sentinelops_ingestion_batch_size_bucket[5m])) by (le))",
+          "legendFormat": "p50 batch size"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(sentinelops_ingestion_batch_size_bucket[5m])) by (le))",
+          "legendFormat": "p95 batch size"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Anomalies Detected (by severity)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(sentinelops_anomaly_detected_total[5m])) by (severity)",
+          "legendFormat": "{{severity}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Anomaly Detection Cycles (rate/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(sentinelops_anomaly_detection_cycles_total[5m])",
+          "legendFormat": "detection cycles/s"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Anomaly Engine DB Query Errors",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(sentinelops_anomaly_db_query_errors_total[5m])",
+          "legendFormat": "db query errors/s"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "LLM Queries Submitted (rate/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(sentinelops_llm_queries_total[5m])",
+          "legendFormat": "queries/s"
+        },
+        {
+          "expr": "rate(sentinelops_llm_query_failures_total[5m])",
+          "legendFormat": "failures/s"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "LLM Query Duration (p50/p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(sentinelops_llm_query_duration_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p50 duration"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(sentinelops_llm_query_duration_seconds_bucket[10m])) by (le))",
+          "legendFormat": "p95 duration"
+        }
+      ]
+    }
+  ]
+}
