@@ -33,8 +33,14 @@ logger = logging.getLogger("log-producer")
 KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "localhost:9092")
 TOPIC = os.getenv("LOG_TOPIC", "service-logs")
 EMIT_INTERVAL_SECONDS = float(os.getenv("EMIT_INTERVAL_SECONDS", "0.2"))
-ANOMALY_PROBABILITY = float(os.getenv("ANOMALY_PROBABILITY", "0.02"))
-
+# Target: anomaly bursts should occupy roughly 3-5% of total time per
+# service, not be the dominant traffic pattern. With burst length averaging
+# ~40 events (random.randint(20, 60)) and ~1.25 events/sec/service, a 0.02
+# probability produced bursts ~44% of the time — anomalies were effectively
+# "normal," which defeats statistical anomaly detection entirely (there's no
+# stable low baseline to detect deviation from). 0.0015 targets ~5% duty cycle:
+# mean gap = 1/0.0015 ≈ 667 events, duty = 40/(667+40) ≈ 5.7%.
+ANOMALY_PROBABILITY = float(os.getenv("ANOMALY_PROBABILITY", "0.0015"))
 SERVICES = ["checkout", "auth", "payments", "inventory"]
 ENDPOINTS = {
     "checkout": ["/cart/add", "/cart/checkout", "/cart/remove"],
@@ -42,7 +48,6 @@ ENDPOINTS = {
     "payments": ["/charge", "/refund", "/payment-status"],
     "inventory": ["/stock/check", "/stock/reserve", "/stock/release"],
 }
-LOG_LEVELS = ["INFO", "INFO", "INFO", "WARN", "ERROR"]
 
 fake = Faker()
 
@@ -123,12 +128,18 @@ def build_event(service: str, anomaly_state: AnomalyState) -> LogEvent:
             anomaly_injected=True,
         )
 
-    # Normal baseline traffic
+    # Normal baseline traffic. `level` is derived from `status_code` (not
+    # independently randomized) so downstream error-rate calculations are
+    # meaningful: a 200 response must never be logged as ERROR, and vice versa.
     latency_ms = round(max(5, random.gauss(120, 40)), 2)
     status_code = 200 if random.random() > 0.03 else random.choice([400, 404])
-    level = random.choice(LOG_LEVELS)
+    if status_code >= 500:
+        level = "ERROR"
+    elif status_code >= 400:
+        level = "WARN"
+    else:
+        level = "INFO"
     message = f"{service} handled {endpoint} for user {fake.uuid4()[:8]}"
-
     return LogEvent(
         event_id=str(uuid.uuid4()),
         timestamp=datetime.now(UTC).isoformat(),

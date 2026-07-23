@@ -49,7 +49,8 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 
 ## Known gaps (tracked, not blocking)
 - No Grafana/Prometheus scrape config yet — metrics are exposed but not yet centrally collected
-- Sustained 40-49% error rates across all services for over an hour post-recovery (not resolving over time as event counts grew 10x) — this looks like a real bug (possibly in the `/api/services` error-rate calculation, or an actual issue in the log producer/ingestion path) rather than a transient catch-up artifact. Needs investigation as the next priority after Milestone 4.
+- Fixed: log producer was assigning `level` independently of `status_code` (a 200 response could randomly be logged as ERROR) — root cause of inflated error-rate metrics. Fixed by deriving level from status_code.
+- Still open: even after that fix, ANOMALY_PROBABILITY (tuned 0.02 → 0.0015 based on burst-duration math) has not brought error rates down to the expected ~5% in live testing — actual observed rates remain 25-37%. The duty-cycle calculation may be missing a factor (e.g. multiple concurrent bursts per service, or burst state not resetting as assumed). Needs a fresh look with the producer's actual runtime behavior, not just the math.
 
 ## Recently closed
 - `anomaly-rust`: added `detect()` end-to-end tests, including a regression guard for the directional-severity bug
