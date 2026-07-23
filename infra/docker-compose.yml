@@ -60,6 +60,7 @@ services:
     ports:
       - "6379:6379"
     networks: [sentinelops-net]
+
   log-producer:
     build:
       context: ../services/log-producer
@@ -75,6 +76,7 @@ services:
       ANOMALY_PROBABILITY: "0.02"
     restart: unless-stopped
     networks: [sentinelops-net]
+
   ingestion-go:
     build:
       context: ../services/ingestion-go
@@ -97,6 +99,7 @@ services:
       - "9100:9100"
     restart: unless-stopped
     networks: [sentinelops-net]
+
   anomaly-rust:
     build:
       context: ../services/anomaly-rust
@@ -119,6 +122,29 @@ services:
       - "9200:9200"
     restart: unless-stopped
     networks: [sentinelops-net]
+
+  llm-query:
+    build:
+      context: ../services/llm-query-python
+      dockerfile: Dockerfile
+    container_name: sentinelops-llm-query
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sentinelops:${TIMESCALE_PASSWORD:-devpassword}@timescaledb:5432/sentinelops
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.2:3b
+      OLLAMA_KEEP_ALIVE: 10m
+      OLLAMA_NUM_PREDICT: "300"
+      OLLAMA_TIMEOUT_SECONDS: "180"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9300:9300"
+    restart: unless-stopped
+    networks: [sentinelops-net]
+
 networks:
   sentinelops-net:
     driver: bridge
