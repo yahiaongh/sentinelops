@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "ingestion-go"
+    static_configs:
+      - targets: ["ingestion-go:9100"]
+        labels:
+          service: "ingestion-go"
+
+  - job_name: "anomaly-rust"
+    static_configs:
+      - targets: ["anomaly-rust:9200"]
+        labels:
+          service: "anomaly-rust"
+
+  - job_name: "llm-query-python"
+    static_configs:
+      - targets: ["llm-query:9300"]
+        labels:
+          service: "llm-query-python"
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

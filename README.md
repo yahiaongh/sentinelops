@@ -24,8 +24,9 @@ flowchart LR
 | `log-producer` | Python | Simulates 4 microservices, injects realistic anomaly bursts | ✅ Running |
 | `ingestion-go` | Go | Kafka consumer → batched writes to TimescaleDB, self-migrating schema | ✅ Running |
 | `anomaly-rust` | Rust | Polls continuous aggregate, z-score + EWMA anomaly detection | ✅ Running |
-| `llm-query-python` | Python | Natural-language RAG query interface over detected anomalies | 🚧 Not started |
-| `dashboard-nextjs` | TypeScript | Real-time dashboard | 🚧 Not started |
+| `llm-query-python` | Python | Natural-language RAG query interface over detected anomalies (local Ollama inference) | ✅ Running |
+| `dashboard-nextjs` | TypeScript | Real-time anomaly feed, service health, LLM query terminal | ✅ Running |
+| Prometheus + Grafana | — | Metrics collection and dashboards for all instrumented services | ✅ Running |
 
 See [docs/MILESTONES.md](docs/MILESTONES.md) for the full roadmap and what's shipped so far.
 
@@ -55,6 +56,8 @@ docker compose logs -f anomaly-rust
 
 # Browse the raw event stream
 open http://localhost:8080   # Redpanda Console
+open http://localhost:3001   # Grafana (admin / devpassword by default)
+open http://localhost:3000   # SentinelOps dashboard
 
 # Check ingestion service metrics
 curl http://localhost:9100/metrics | grep sentinelops

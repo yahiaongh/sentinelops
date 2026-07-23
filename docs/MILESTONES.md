@@ -29,30 +29,35 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 - Caught and fixed a real directional-severity bug in detection logic, with regression tests
 - Extended CI to 7 jobs: added Rust lint/test/fmt and a third Docker image build
 
-## 🚧 Milestone 3 — Python LLM/RAG query service (next)
-- FastAPI service exposing natural-language queries over detected anomalies and log context
-- RAG pipeline: retrieve relevant log/anomaly context, summarize via LLM
-- Incident summarization ("what happened to checkout between 2-3am?")
+## ✅ Milestone 3 — Python LLM/RAG query service
+- FastAPI service exposing natural-language queries over detected anomalies and service stats
+- Retrieval grounded in TimescaleDB (`anomalies`, `log_events_1min`) — verified the model's numbers match real rows exactly, not hallucinated
+- Async job queue (`202 Accepted` + poll) instead of a blocking request, designed around measured local-hardware inference latency (~2.8 tokens/sec on CPU-only Ollama)
+- Diagnosed and fixed a real Ollama networking issue (host-only binding blocking container access) via a systemd override
 
-## 🚧 Milestone 4 — Next.js dashboard
-- Real-time anomaly feed
-- Natural-language query chat interface
-- Service health overview
+## ✅ Milestone 4 — Next.js dashboard
+- Real-time anomaly feed (scrolling log-tail style), service health grid, and an LLM query terminal
+- Custom design system (IBM Plex Sans/Mono, SRE command-center palette) — not a default template look
+- Server-side API routes keep database credentials and the LLM service URL out of the browser
+- Mid-build security upgrade to Next.js 16 + ESLint 9 to close several known CVEs before writing any app code
+- Extended CI to 9 jobs
 
-## 🚧 Milestone 5 — Observability stack
-- Prometheus scraping all services (currently exposed but not scraped)
-- Grafana dashboards
+## ✅ Milestone 5 — Observability stack
+- Prometheus scraping ingestion-go, anomaly-rust, and llm-query-python on 15s intervals
+- Grafana with provisioned datasource and dashboard (committed JSON, not clicked together — reproducible from a fresh `docker compose up`)
+- 9-panel dashboard covering ingestion throughput/errors, batch performance, anomaly detection rate and severity breakdown, and LLM query latency/failure rate
 
-## 🚧 Milestone 6 — Kubernetes deployment
+## 🚧 Milestone 6 — Kubernetes deployment (next)
 - Manifests for all services
 - Local cluster deployment (k3d/kind) as a production-shaped deploy path
 
 ## Known gaps (tracked, not blocking)
-- No Grafana/Prometheus scrape config yet — metrics are exposed but not yet centrally collected
-- Fixed: log producer was assigning `level` independently of `status_code` (a 200 response could randomly be logged as ERROR) — root cause of inflated error-rate metrics. Fixed by deriving level from status_code.
-- Fixed: the ANOMALY_PROBABILITY tuning (0.02 → 0.0015) from the previous fix never actually took effect — a copy/paste error had applied the new value to `redpanda-console`'s environment block (which ignores it) instead of `log-producer`'s. Corrected and verified live: error rates dropped from ~30-50% to ~0-15%, matching expected burst-driven anomaly frequency (confirmed against actual burst log timestamps in a sample window).
+- No automated tests for the Next.js dashboard (API routes or components) — only manual/visual verification so far
+- `services/dashboard-nextjs/README.md` is still `create-next-app`'s default boilerplate, not project-specific docs
 
 ## Recently closed
+- Log producer was assigning `level` independently of `status_code` (a 200 response could randomly be logged as ERROR) — root cause of inflated error-rate metrics. Fixed by deriving level from status_code.
+- A follow-up fix (`ANOMALY_PROBABILITY` 0.02 → 0.0015) never actually took effect due to a copy/paste error that applied it to the wrong service's environment block. Corrected and verified live: error rates dropped from ~30-50% to ~0-15%, matching expected burst-driven anomaly frequency.
 - `anomaly-rust`: added `detect()` end-to-end tests, including a regression guard for the directional-severity bug
 - `anomaly-rust`: EWMA baseline now persisted in `AnomalyRecord` for error-burst anomalies
 - `ingestion-go`: added mocked-pool unit tests for `store.go`'s write path (`pgxmock`), alongside existing integration tests
