@@ -31,6 +31,9 @@ services:
     depends_on: [redpanda]
     environment:
       KAFKA_BROKERS: redpanda:9092
+      LOG_TOPIC: service-logs
+      EMIT_INTERVAL_SECONDS: "0.2"
+      ANOMALY_PROBABILITY: "0.0015"
     ports:
       - "8080:8080"
     networks: [sentinelops-net]
