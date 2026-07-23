@@ -50,7 +50,7 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 ## Known gaps (tracked, not blocking)
 - No Grafana/Prometheus scrape config yet — metrics are exposed but not yet centrally collected
 - Fixed: log producer was assigning `level` independently of `status_code` (a 200 response could randomly be logged as ERROR) — root cause of inflated error-rate metrics. Fixed by deriving level from status_code.
-- Still open: even after that fix, ANOMALY_PROBABILITY (tuned 0.02 → 0.0015 based on burst-duration math) has not brought error rates down to the expected ~5% in live testing — actual observed rates remain 25-37%. The duty-cycle calculation may be missing a factor (e.g. multiple concurrent bursts per service, or burst state not resetting as assumed). Needs a fresh look with the producer's actual runtime behavior, not just the math.
+- Fixed: the ANOMALY_PROBABILITY tuning (0.02 → 0.0015) from the previous fix never actually took effect — a copy/paste error had applied the new value to `redpanda-console`'s environment block (which ignores it) instead of `log-producer`'s. Corrected and verified live: error rates dropped from ~30-50% to ~0-15%, matching expected burst-driven anomaly frequency (confirmed against actual burst log timestamps in a sample window).
 
 ## Recently closed
 - `anomaly-rust`: added `detect()` end-to-end tests, including a regression guard for the directional-severity bug
