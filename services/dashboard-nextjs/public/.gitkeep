@@ -1,0 +1,1 @@
+<!-- placeholder: prevents Docker COPY from failing on an empty public/ dir -->

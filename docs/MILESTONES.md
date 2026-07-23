@@ -49,6 +49,7 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 
 ## Known gaps (tracked, not blocking)
 - No Grafana/Prometheus scrape config yet — metrics are exposed but not yet centrally collected
+- Sustained 40-49% error rates across all services for over an hour post-recovery (not resolving over time as event counts grew 10x) — this looks like a real bug (possibly in the `/api/services` error-rate calculation, or an actual issue in the log producer/ingestion path) rather than a transient catch-up artifact. Needs investigation as the next priority after Milestone 4.
 
 ## Recently closed
 - `anomaly-rust`: added `detect()` end-to-end tests, including a regression guard for the directional-severity bug
