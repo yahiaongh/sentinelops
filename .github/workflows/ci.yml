@@ -121,7 +121,7 @@ jobs:
 
             - name: Install dependencies
               working-directory: services/llm-query-python
-              run: pip install -r requirements.txt
+              run: pip install -r requirements-dev.txt
 
             - name: Run tests
               working-directory: services/llm-query-python
