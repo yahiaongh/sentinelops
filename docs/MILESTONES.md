@@ -54,10 +54,11 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 - Known, documented scope boundary: llm-query-python and dashboard-nextjs are not yet deployed to K8s, since both depend on a host-native Ollama instance reachable via `host.docker.internal` in Compose — that networking path doesn't translate directly into a k3d cluster. Noted explicitly rather than silently skipped; see infra/k8s/README.md.
 
 ## Known gaps (tracked, not blocking)
-- No automated tests for the Next.js dashboard (API routes or components) — only manual/visual verification so far
-- `services/dashboard-nextjs/README.md` is still `create-next-app`'s default boilerplate, not project-specific docs
+_None currently open — see below._
 
 ## Recently closed
+- Added Vitest tests for dashboard API route logic (error-rate calculation, query param parsing) — extracted into testable `lib/` modules following the same pattern as the Go/Rust/Python services
+- Rewrote `services/dashboard-nextjs/README.md` with project-specific docs (was `create-next-app` boilerplate)
 - Log producer was assigning `level` independently of `status_code` (a 200 response could randomly be logged as ERROR) — root cause of inflated error-rate metrics. Fixed by deriving level from status_code.
 - A follow-up fix (`ANOMALY_PROBABILITY` 0.02 → 0.0015) never actually took effect due to a copy/paste error that applied it to the wrong service's environment block. Corrected and verified live: error rates dropped from ~30-50% to ~0-15%, matching expected burst-driven anomaly frequency.
 - `anomaly-rust`: added `detect()` end-to-end tests, including a regression guard for the directional-severity bug
