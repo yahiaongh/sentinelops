@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import type { ServiceHealth } from "@/lib/types";
+import { parseHoursParam, toServiceHealth } from "@/lib/serviceHealth";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const hours = Number(searchParams.get("hours") ?? "1");
+  const hours = parseHoursParam(searchParams.get("hours"), 1);
 
   try {
     const result = await pool.query(
@@ -19,21 +19,7 @@ export async function GET(request: Request) {
        ORDER BY service`,
       [hours]
     );
-
-    const services: ServiceHealth[] = result.rows.map((r) => {
-      const totalEvents = Number(r.total_events) || 0;
-      const totalErrors = Number(r.total_errors) || 0;
-      return {
-        service: r.service,
-        total_events: totalEvents,
-        total_errors: totalErrors,
-        error_rate: totalEvents > 0 ? totalErrors / totalEvents : 0,
-        avg_p95_latency_ms: r.avg_p95_latency_ms !== null ? Number(r.avg_p95_latency_ms) : null,
-        max_latency_ms: r.max_latency_ms !== null ? Number(r.max_latency_ms) : null,
-      };
-    });
-
-    return NextResponse.json(services);
+    return NextResponse.json(toServiceHealth(result.rows));
   } catch (error) {
     console.error("Failed to fetch service health", error);
     return NextResponse.json({ error: "Failed to fetch service health" }, { status: 500 });
