@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-producer
+  namespace: sentinelops
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: log-producer }
+  template:
+    metadata:
+      labels: { app: log-producer }
+    spec:
+      containers:
+        - name: log-producer
+          image: sentinelops/log-producer:local
+          imagePullPolicy: Never
+          env:
+            - name: KAFKA_BROKERS
+              value: "redpanda:9092"
+            - name: LOG_TOPIC
+              value: "service-logs"
+            - name: EMIT_INTERVAL_SECONDS
+              value: "0.2"
+            - name: ANOMALY_PROBABILITY
+              value: "0.0015"

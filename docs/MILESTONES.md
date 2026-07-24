@@ -47,9 +47,11 @@ Status and scope for each phase of SentinelOps. Dates are approximate; this is a
 - Grafana with provisioned datasource and dashboard (committed JSON, not clicked together — reproducible from a fresh `docker compose up`)
 - 9-panel dashboard covering ingestion throughput/errors, batch performance, anomaly detection rate and severity breakdown, and LLM query latency/failure rate
 
-## 🚧 Milestone 6 — Kubernetes deployment (next)
-- Manifests for all services
-- Local cluster deployment (k3d/kind) as a production-shaped deploy path
+## ✅ Milestone 6 — Kubernetes deployment
+- k3d local cluster (1 server + 1 agent node), kubectl's built-in Kustomize for manifest organization
+- Core pipeline deployed and verified end-to-end inside the cluster: log-producer → Redpanda → ingestion-go → TimescaleDB → anomaly-rust, with real multi-node pod scheduling
+- Kubernetes Secrets for credentials (never committed with real values)
+- Known, documented scope boundary: llm-query-python and dashboard-nextjs are not yet deployed to K8s, since both depend on a host-native Ollama instance reachable via `host.docker.internal` in Compose — that networking path doesn't translate directly into a k3d cluster. Noted explicitly rather than silently skipped; see infra/k8s/README.md.
 
 ## Known gaps (tracked, not blocking)
 - No automated tests for the Next.js dashboard (API routes or components) — only manual/visual verification so far
