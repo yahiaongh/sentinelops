@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
+import { parsePositiveNumberParam } from "@/lib/queryParams";
 import type { Anomaly } from "@/lib/types";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const hours = Number(searchParams.get("hours") ?? "24");
-  const limit = Number(searchParams.get("limit") ?? "50");
+  const hours = parsePositiveNumberParam(searchParams.get("hours"), 24);
+  const limit = parsePositiveNumberParam(searchParams.get("limit"), 50);
 
   try {
     const result = await pool.query<Anomaly>(

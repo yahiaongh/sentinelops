@@ -145,6 +145,9 @@ jobs:
         - name: Run ESLint
           working-directory: services/dashboard-nextjs
           run: npm run lint
+        - name: Run tests
+          working-directory: services/dashboard-nextjs
+          run: npm test
         - name: Build
           working-directory: services/dashboard-nextjs
           run: npm run build
